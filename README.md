@@ -1,6 +1,6 @@
 # EditTagsOverhaul
 
-The edit tab now has Tag Groups organised by your parent-child tags and supports nesting for an additional group. Applies to scenes, images and galleries.
+The edit tab now has Tag Groups organized by your parent-child tags and supports nesting for an additional group. Applies to scenes, images and galleries.
 
 - Set up hierarchies and sort order by setting parent-child tag relationships and using sort names for tags. If sort name does not exist defaults to tag name
 - Clicking on tags adds that tag to the scene/image/gallery
