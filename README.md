@@ -12,12 +12,12 @@ The edit tab now has Tag Groups organised by your parent-child tags and supports
 
 <h2>Preview</h2>
 <p>
-  <img src="images/EditTagsOverhaulPreview.gif" alt="EditTagsOverhaul preview" width="600">
+  <img src="/plugins/EditTagsOverhaul/images/EditTagsOverhaulPreview.gif" alt="EditTagsOverhaul preview" width="600">
 </p>
 
 <h2>Settings Preview</h2>
 <p>
-  <img src="images/EditTagsOverhaulSettingsPreview.png" alt="EditTagsOverhaul settings" width="600">
+  <img src="/plugins/EditTagsOverhaul/images/EditTagsOverhaulSettingsPreview.png" alt="EditTagsOverhaul settings" width="600">
 </p>
 
 
