@@ -1,23 +1,25 @@
-# Template for creating Stash plugins source index
+# EditTagsOverhaul
 
-This template allows you to create a new repository with a few clicks with preconfigured GitHub action to publish your plugins source index. 
-_This assumes you already know how to create plugins for Stash. If you don't, first read [this](https://docs.stashapp.cc/in-app-manual/plugins/#creating-plugins)._
+The edit tab now has Tag Groups organised by your parent-child tags and supports nesting for an additional group. Applies to scenes, images and galleries.
 
-## How to use it?
+- Set up hierarchies and sort order by setting parent-child tag relationships and using sort names for tags. If sort name does not exist defaults to tag name
+- Clicking on tags adds that tag to the scene/image/gallery
+- Middle mouse pressing on the tag opens the tag page
+- Tag Groups can be toggled on with the + button, useful if a tag you use as a group header is also a relevant tag for the content
+- Tag buttons can use text, image, or text and image
+- Size of image displays and the color of the border highlight can be customized
+- Setting to allow tags with multiple parents to exist under each parent, useful if a tag is relevant to different groups
 
-1. Click **Use this template** > **Create a new repository**. 
-1. Choose a repository name and click **Create repository**.
-1. Open **Settings** and head to **Pages**.
-1. Under Build and deployment select the Source as GitHub Actions.
+<h2>Preview</h2>
+<p>
+  <img src="images/EditTagsOverhaulPreview.gif" alt="EditTagsOverhaul preview" width="600">
+</p>
 
-Now add your plugins to [plugins](/plugins) directory and they will be automatically published to the source index.
+<h2>Settings Preview</h2>
+<p>
+  <img src="images/EditTagsOverhaulSettingsPreview.png" alt="EditTagsOverhaul settings" width="600">
+</p>
 
-Source index URL: [`https://<your-username>.github.io/<repository-name>/main/index.yml`](https://<your-username>.github.io/<repository-name>/main/index.yml)
-
-## Share your plugins
-
-- [Create a new topic](https://discourse.stashapp.cc/t/-/33) for your plugin on the community forum.
-- [Add your source index to the list](https://discourse.stashapp.cc/t/-/122) on the Stash community forum.
 
 ## License
 
