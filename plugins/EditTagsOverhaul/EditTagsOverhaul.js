@@ -92,6 +92,8 @@
     isInjecting: false,
     injectToken: 0,
     scheduledRouteToken: 0,
+    currentSearchQuery: "",
+    searchIndex: null,
   };
 
   async function loadConfig() {
@@ -497,6 +499,332 @@
     });
   }
 
+  function normalizeSearchText(value) {
+    return String(value || "")
+      .normalize("NFKD")
+      .replace(/[\u0300-\u036f]/g, "")
+      .toLowerCase()
+      .trim();
+  }
+
+  function buildSearchIndex(tags, cfg) {
+    const duplicateMultiParentTags = getConfigBoolean(
+      cfg.duplicateMultiParentTags,
+      false
+    );
+
+    const tagMap = new Map();
+    tags.forEach((tag) => {
+      tagMap.set(String(tag.id), {
+        id: String(tag.id),
+        name: tag.name,
+        sort_name: tag.sort_name || tag.name || "",
+        image_path: tag.image_path || "",
+        parents: (tag.parents || []).map((p) => ({
+          id: String(p.id),
+          name: p.name,
+          sort_name: p.sort_name || p.name || "",
+          parents: (p.parents || []).map((gp) => ({
+            id: String(gp.id),
+            name: gp.name,
+            sort_name: gp.sort_name || gp.name || "",
+          })),
+        })),
+        childIds: (tag.children || []).map((c) => String(c.id)),
+      });
+    });
+
+    function isParentTag(tagRecord) {
+      return !!(tagRecord && tagRecord.childIds && tagRecord.childIds.length > 0);
+    }
+
+    function getParentPaths(tagRecord) {
+      if (!tagRecord.parents.length) return [{ type: "ungrouped" }];
+
+      const paths = [];
+
+      for (const immediateParent of tagRecord.parents) {
+        const parentRecord = tagMap.get(String(immediateParent.id));
+
+        if (parentRecord && parentRecord.parents && parentRecord.parents.length > 0) {
+          for (const topParent of parentRecord.parents) {
+            paths.push({
+              type: "subgroup",
+              topParent,
+              subgroupParent: parentRecord,
+            });
+            if (!duplicateMultiParentTags) return paths;
+          }
+        } else {
+          paths.push({
+            type: "group",
+            topParent: immediateParent,
+          });
+          if (!duplicateMultiParentTags) return paths;
+        }
+      }
+
+      return paths;
+    }
+
+    const results = [];
+
+    for (const tag of tags) {
+      const tagId = String(tag.id);
+      const tagRecord = tagMap.get(tagId);
+      if (!tagRecord) continue;
+
+      const paths = getParentPaths(tagRecord);
+      const parentTag = isParentTag(tagRecord);
+
+      for (const path of paths) {
+        let breadcrumb = "Ungrouped";
+        let targetKind = parentTag ? "header" : "leaf";
+        let targetId = tagRecord.id;
+        let groupId = "__ungrouped__";
+        let subgroupId = "";
+
+        if (path.type === "group") {
+          breadcrumb = path.topParent.name;
+          if (parentTag) {
+            targetId = String(path.topParent.id);
+            groupId = String(path.topParent.id);
+          } else {
+            groupId = String(path.topParent.id);
+          }
+        } else if (path.type === "subgroup") {
+          breadcrumb = `${path.topParent.name} > ${path.subgroupParent.name}`;
+          groupId = String(path.topParent.id);
+          subgroupId = String(path.subgroupParent.id);
+          if (parentTag) {
+            targetId = String(path.subgroupParent.id);
+          }
+        }
+
+        if (path.type === "ungrouped" && parentTag) {
+          targetKind = "header";
+        }
+
+        results.push({
+          id: tagRecord.id,
+          name: tagRecord.name,
+          sort_name: tagRecord.sort_name || tagRecord.name || "",
+          image_path: tagRecord.image_path || "",
+          targetKind,
+          targetId,
+          groupId,
+          subgroupId,
+          breadcrumb,
+          searchText: normalizeSearchText(
+            `${tagRecord.name} ${tagRecord.sort_name} ${breadcrumb}`
+          ),
+        });
+
+        if (!duplicateMultiParentTags) break;
+      }
+    }
+
+    results.sort((a, b) => {
+      const aKey = (a.sort_name || a.name || "").toLowerCase();
+      const bKey = (b.sort_name || b.name || "").toLowerCase();
+      return aKey.localeCompare(bKey, undefined, { sensitivity: "base" });
+    });
+
+    return results;
+  }
+
+  function getSearchResults(query, limit = 30) {
+    const normalized = normalizeSearchText(query);
+    if (!normalized || !Array.isArray(state.searchIndex)) return [];
+
+    const prefixMatches = [];
+    const containsMatches = [];
+
+    for (const item of state.searchIndex) {
+      if (!item.searchText.includes(normalized)) continue;
+      if (item.searchText.startsWith(normalized)) prefixMatches.push(item);
+      else containsMatches.push(item);
+      if (prefixMatches.length + containsMatches.length >= limit * 3) break;
+    }
+
+    return prefixMatches.concat(containsMatches).slice(0, limit);
+  }
+
+  function flashSearchTarget(target) {
+    if (!target) return;
+    target.classList.remove("edit-tags-overhaul__search-target-flash");
+    void target.offsetWidth;
+    target.classList.add("edit-tags-overhaul__search-target-flash");
+    setTimeout(() => {
+      target.classList.remove("edit-tags-overhaul__search-target-flash");
+    }, 1600);
+  }
+
+  function revealSearchResult(result) {
+    if (!result) return;
+
+    const panel = document.getElementById(PANEL_ID);
+    if (!panel) return;
+
+    const groupSection = panel.querySelector(
+      `.edit-tags-overhaul__group[data-grouped-scene-parent-id="${CSS.escape(result.groupId)}"]`
+    );
+    if (groupSection) groupSection.classList.add("is-open");
+
+    let target = null;
+
+    if (result.subgroupId) {
+      const subgroupSection = panel.querySelector(
+        `.edit-tags-overhaul__subgroup[data-grouped-scene-subgroup-id="${CSS.escape(result.subgroupId)}"]`
+      );
+      if (subgroupSection) subgroupSection.classList.add("is-open");
+      if (result.targetKind === "header") {
+        target = subgroupSection || groupSection;
+      } else {
+        target = subgroupSection?.querySelector(
+          `[data-eto-tag-id="${CSS.escape(result.targetId)}"]`
+        );
+      }
+    } else if (result.targetKind === "header") {
+      target = groupSection;
+    } else if (groupSection) {
+      target = groupSection.querySelector(
+        `[data-eto-tag-id="${CSS.escape(result.targetId)}"]`
+      );
+    }
+
+    if (!target && result.targetKind === "header") {
+      target = panel.querySelector(
+        `[data-eto-header-tag-id="${CSS.escape(result.targetId)}"]`
+      )?.closest(".edit-tags-overhaul__group, .edit-tags-overhaul__subgroup");
+    }
+
+    if (!target) return;
+
+    target.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
+    flashSearchTarget(target);
+  }
+
+  function renderSearchResults(panel) {
+    const resultsWrap = panel.querySelector(".edit-tags-overhaul__search-results");
+    const emptyEl = panel.querySelector(".edit-tags-overhaul__search-empty");
+    if (!resultsWrap || !emptyEl) return;
+
+    resultsWrap.innerHTML = "";
+
+    const query = state.currentSearchQuery || "";
+    const trimmed = query.trim();
+    if (!trimmed) {
+      emptyEl.hidden = true;
+      return;
+    }
+
+    const results = getSearchResults(trimmed, 24);
+    emptyEl.hidden = results.length > 0;
+
+    results.forEach((result) => {
+      const row = document.createElement("div");
+      row.className = "edit-tags-overhaul__search-result";
+
+      const main = document.createElement("button");
+      main.type = "button";
+      main.className = "edit-tags-overhaul__search-result-main";
+      main.setAttribute("data-eto-search-jump-id", result.id);
+      main.setAttribute("data-eto-search-target-id", result.targetId);
+      main.setAttribute("data-eto-search-target-kind", result.targetKind);
+      main.setAttribute("data-eto-search-group-id", result.groupId);
+      if (result.subgroupId) {
+        main.setAttribute("data-eto-search-subgroup-id", result.subgroupId);
+      }
+      main.title = `Reveal ${result.name} in hierarchy`;
+
+      if (result.image_path) {
+        const img = document.createElement("img");
+        img.className = "edit-tags-overhaul__search-result-image";
+        img.src = result.image_path;
+        img.alt = result.name;
+        main.appendChild(img);
+      }
+
+      const textWrap = document.createElement("span");
+      textWrap.className = "edit-tags-overhaul__search-result-text";
+
+      const nameEl = document.createElement("span");
+      nameEl.className = "edit-tags-overhaul__search-result-name";
+      nameEl.textContent = result.name;
+
+      const pathEl = document.createElement("span");
+      pathEl.className = "edit-tags-overhaul__search-result-path";
+      pathEl.textContent = result.breadcrumb;
+
+      textWrap.appendChild(nameEl);
+      textWrap.appendChild(pathEl);
+      main.appendChild(textWrap);
+
+      const toggle = document.createElement("button");
+      toggle.type = "button";
+      toggle.className = "edit-tags-overhaul__search-result-toggle";
+      toggle.setAttribute("data-eto-search-toggle-id", result.id);
+      toggle.title = state.selectedTagIds.has(result.id) ? "Remove tag" : "Add tag";
+      toggle.textContent = state.selectedTagIds.has(result.id) ? "✓" : "+";
+      toggle.classList.toggle("is-selected", state.selectedTagIds.has(result.id));
+
+      row.appendChild(main);
+      row.appendChild(toggle);
+      resultsWrap.appendChild(row);
+    });
+  }
+
+  function createSearchControls() {
+    const wrap = document.createElement("div");
+    wrap.className = "edit-tags-overhaul__search";
+
+    const input = document.createElement("input");
+    input.type = "search";
+    input.className = "edit-tags-overhaul__search-input";
+    input.placeholder = "Search tags to reveal or toggle";
+    input.autocomplete = "off";
+    input.spellcheck = false;
+    input.value = state.currentSearchQuery || "";
+
+    const results = document.createElement("div");
+    results.className = "edit-tags-overhaul__search-results";
+
+    const empty = document.createElement("div");
+    empty.className = "edit-tags-overhaul__search-empty";
+    empty.textContent = "No matching tags";
+    empty.hidden = true;
+
+    input.addEventListener("input", () => {
+      state.currentSearchQuery = input.value || "";
+      renderSearchResults(wrap.closest(`#${PANEL_ID}`));
+    });
+
+    input.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
+        if (input.value) {
+          input.value = "";
+          state.currentSearchQuery = "";
+          renderSearchResults(wrap.closest(`#${PANEL_ID}`));
+        }
+        return;
+      }
+
+      if (event.key === "Enter") {
+        const firstResult = wrap.querySelector("[data-eto-search-jump-id]");
+        if (firstResult) {
+          event.preventDefault();
+          firstResult.click();
+        }
+      }
+    });
+
+    wrap.appendChild(input);
+    wrap.appendChild(results);
+    wrap.appendChild(empty);
+    return wrap;
+  }
+
   function groupHasSelectedTags(group) {
     if (group.parent.id !== "__ungrouped__" && state.selectedTagIds.has(group.parent.id)) {
       return true;
@@ -575,6 +903,15 @@
       }
 
       countEl.textContent = selectedCount > 0 ? `${selectedCount} selected` : "";
+    });
+
+    document.querySelectorAll("[data-eto-search-toggle-id]").forEach((el) => {
+      const id = el.getAttribute("data-eto-search-toggle-id");
+      const selected = state.selectedTagIds.has(id);
+      el.classList.toggle("is-selected", selected);
+      el.textContent = selected ? "✓" : "+";
+      el.setAttribute("title", selected ? "Remove tag" : "Add tag");
+      el.setAttribute("aria-pressed", selected ? "true" : "false");
     });
   }
 
@@ -826,6 +1163,29 @@
         return;
       }
 
+      const searchToggleBtn = event.target.closest("[data-eto-search-toggle-id]");
+      if (searchToggleBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const tagId = searchToggleBtn.getAttribute("data-eto-search-toggle-id");
+        if (tagId) onTagToggleClick(tagId, searchToggleBtn);
+        return;
+      }
+
+      const searchJumpBtn = event.target.closest("[data-eto-search-jump-id]");
+      if (searchJumpBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        revealSearchResult({
+          id: searchJumpBtn.getAttribute("data-eto-search-jump-id"),
+          targetId: searchJumpBtn.getAttribute("data-eto-search-target-id"),
+          targetKind: searchJumpBtn.getAttribute("data-eto-search-target-kind"),
+          groupId: searchJumpBtn.getAttribute("data-eto-search-group-id"),
+          subgroupId: searchJumpBtn.getAttribute("data-eto-search-subgroup-id") || "",
+        });
+        return;
+      }
+
       const toggleHeader = event.target.closest("[data-eto-toggle-section]");
       if (toggleHeader) {
         const section = toggleHeader.closest(".edit-tags-overhaul__group, .edit-tags-overhaul__subgroup");
@@ -835,7 +1195,9 @@
 
     panel.addEventListener("mousedown", (event) => {
       if (event.button !== 1) return;
-      const target = event.target.closest("[data-eto-tag-id], [data-eto-toggle-section]");
+      const target = event.target.closest(
+        "[data-eto-tag-id], [data-eto-toggle-section], [data-eto-search-jump-id]"
+      );
       if (target) event.preventDefault();
     });
 
@@ -847,6 +1209,15 @@
         event.preventDefault();
         event.stopPropagation();
         const tagId = tagBtn.getAttribute("data-eto-tag-id");
+        if (tagId) window.open(`/tags/${tagId}`, "_blank", "noopener");
+        return;
+      }
+
+      const searchJumpBtn = event.target.closest("[data-eto-search-jump-id]");
+      if (searchJumpBtn) {
+        event.preventDefault();
+        event.stopPropagation();
+        const tagId = searchJumpBtn.getAttribute("data-eto-search-jump-id");
         if (tagId) window.open(`/tags/${tagId}`, "_blank", "noopener");
         return;
       }
@@ -886,6 +1257,9 @@
     titleRow.appendChild(summary);
     panel.appendChild(titleRow);
 
+    const searchControls = createSearchControls();
+    panel.appendChild(searchControls);
+
     const groupsWrap = document.createElement("div");
     groupsWrap.className = "edit-tags-overhaul__groups";
 
@@ -895,6 +1269,7 @@
 
     panel.appendChild(groupsWrap);
     attachPanelEventDelegation(panel);
+    renderSearchResults(panel);
     return panel;
   }
 
@@ -942,6 +1317,7 @@
       state.currentEntity = latestEntity;
 
       const groups = buildNestedGroupsPreservingOrder(allTags, cfg);
+      state.searchIndex = buildSearchIndex(allTags, cfg);
       if (!groups.length) return false;
 
       const panel = createPanel(groups, cfg);
@@ -992,6 +1368,8 @@
       state.currentEntity = null;
       state.selectedTagIds = new Set();
       state.loadedSelectionEntityKey = null;
+      state.currentSearchQuery = "";
+      state.searchIndex = null;
       state.scheduledRouteToken += 1;
       return true;
     }
