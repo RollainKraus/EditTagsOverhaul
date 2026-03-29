@@ -2,6 +2,8 @@
 
 The edit tab now has Tag Groups organized by your parent-child tags and supports nesting for an additional group. Applies to scenes, images and galleries.
 
+
+- **NEW** Added back the original tag search field but it also ties in to the toggle system. Toggle tags straight from the search tab or navigate to where the tag is in the hierarchy
 - Set up hierarchies and sort order by setting parent-child tag relationships and using sort names for tags. If sort name does not exist defaults to tag name
 - Clicking on tags adds that tag to the scene/image/gallery
 - Middle mouse pressing on the tag opens the tag page
@@ -13,6 +15,11 @@ The edit tab now has Tag Groups organized by your parent-child tags and supports
 <h2>Preview</h2>
 <p>
   <img src="/plugins/EditTagsOverhaul/images/EditTagsOverhaulPreview.gif" alt="EditTagsOverhaul preview" width="600">
+</p>
+
+<h2>Search Preview</h2>
+<p>
+  <img src="/plugins/EditTagsOverhaul/images/EditTagsOverhaulSEARCHPreview.png" alt="EditTagsOverhaul search" width="600">
 </p>
 
 <h2>Settings Preview</h2>
