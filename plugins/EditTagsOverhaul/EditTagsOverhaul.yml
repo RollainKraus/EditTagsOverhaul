@@ -1,6 +1,6 @@
 name: EditTagsOverhaul
-description: Hierarchical tag browser for scene, gallery, and image edit pages
-version: 0.3.3
+description: Hierarchical tag browser with inline search for scene, gallery, and image edit pages
+version: 0.4.0
 url: https://example.invalid/EditTagsOverhaul
 
 settings:
