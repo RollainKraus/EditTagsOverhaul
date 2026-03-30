@@ -27,6 +27,7 @@ The edit tab now has Tag Groups organized by your parent-child tags and supports
   <img src="/plugins/EditTagsOverhaul/images/EditTagsOverhaulSettingsPreview.png" alt="EditTagsOverhaul settings" width="600">
 </p>
 
+Made with AI
 
 ## License
 
